@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyTitle>PartyLights.UI</AssemblyTitle>
+    <AssemblyDescription>WPF user interface for PartyLights</AssemblyDescription>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PartyLights.Core\PartyLights.Core.csproj" />
+    <ProjectReference Include="..\PartyLights.Services\PartyLights.Services.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModernWpfUI" Version="0.9.6" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

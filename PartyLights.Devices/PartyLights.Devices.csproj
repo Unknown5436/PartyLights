@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyTitle>PartyLights.Devices</AssemblyTitle>
+    <AssemblyDescription>Device-specific implementations for PartyLights</AssemblyDescription>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PartyLights.Core\PartyLights.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Q42.HueApi" Version="4.0.0" />
+    <PackageReference Include="System.Text.Json" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

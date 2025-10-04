@@ -1,0 +1,142 @@
+---
+description: "Windows .NET application development guidelines and conventions for desktop applications"
+alwaysApply: false
+autoAttachments:
+  - "*.cs"
+  - "*.xaml"
+  - "*.csproj"
+  - "*.json"
+  - "appsettings*.json"
+  - "*.config"
+---
+
+# Windows .NET Application Project Rules
+
+This is a Windows desktop application using .NET 8+ and C# 12 with modern Windows development practices.
+
+## Framework Standards
+
+- Use .NET 8+ for all new projects
+- Target Windows 10/11 (minimum version 1809)
+- Follow Microsoft's Windows App SDK guidelines
+- Use WinUI 3 for modern UI, WPF for legacy applications
+- Follow Windows platform conventions and UX guidelines
+
+## Architecture Patterns
+
+- Use Clean Architecture with clear separation of layers
+- Implement CQRS pattern for complex business logic
+- Use MediatR for command/query handling
+- Repository pattern for data access
+- Use dependency injection throughout
+- Event-driven architecture where appropriate
+- Domain-driven design for complex domains
+
+## Dependencies & NuGet Packages
+
+- Prefer Microsoft.Extensions.\* packages for core functionality
+- Use Serilog for structured logging
+- FluentValidation for input validation
+- AutoMapper for object-to-object mapping
+- Polly for resilience and transient fault handling
+- Verify all packages are actively maintained before adding
+
+## Configuration Management
+
+- Use appsettings.json for application configuration
+- Implement Options pattern for strongly-typed configuration
+- Use User Secrets for local development sensitive data
+- Azure Key Vault for production secrets management
+- Environment-specific configuration files (appsettings.Development.json, etc.)
+- Validate configuration on startup
+
+## Async Patterns
+
+- All I/O operations must be async
+- Use ConfigureAwait(false) in library code
+- Avoid async void except for event handlers
+- Implement proper cancellation token support throughout
+- Use ValueTask for high-performance scenarios
+- Handle async exceptions properly
+
+## Error Handling
+
+- Use Result pattern instead of exceptions for business logic flows
+- Log all exceptions with full context and stack traces
+- Implement global exception handler for unhandled exceptions
+- Provide user-friendly error messages (never expose technical details)
+- Include error codes for support tracking
+- Implement retry logic for transient failures
+
+## Performance Standards
+
+- Target sub-100ms response time for UI operations
+- Implement lazy loading for heavy resources
+- Use connection pooling for database access
+- Cache frequently accessed data appropriately
+- Profile and optimize hot paths
+- Minimize allocations in performance-critical code
+
+## Testing Requirements
+
+- Unit tests for business logic (80%+ coverage goal)
+- Integration tests for data access layer
+- UI tests for critical user flows
+- Mock external dependencies in tests
+- Use test fixtures for complex setup
+- Continuous testing in CI/CD pipeline
+
+## Code Organization
+
+- /Presentation - UI layer (WinUI 3/WPF)
+- /Application - Application logic and use cases
+- /Domain - Business entities and logic
+- /Infrastructure - External concerns (data access, file system, etc.)
+- /Shared - Cross-cutting concerns
+- /Tests - Test projects mirroring main structure
+
+## Naming Conventions
+
+- Use PascalCase for classes, methods, properties, public fields
+- Use camelCase for local variables and parameters
+- Prefix interfaces with "I" (e.g., IUserService)
+- Suffix view models with "ViewModel" (e.g., MainViewModel)
+- Suffix services with "Service" (e.g., DataService)
+- Use meaningful, descriptive names (avoid abbreviations)
+
+## Security Best Practices
+
+- Validate all user input
+- Sanitize data before display
+- Use parameterized queries (never string concatenation for SQL)
+- Implement proper authentication and authorization
+- Store sensitive data encrypted
+- Follow principle of least privilege
+- Regular security audits and dependency scanning
+
+## Logging Standards
+
+- Use structured logging (Serilog)
+- Log levels: Trace, Debug, Information, Warning, Error, Critical
+- Include correlation IDs for request tracking
+- Never log sensitive information (passwords, tokens, PII)
+- Configure log rotation and retention policies
+- Separate operational logs from audit logs
+
+## Data Access
+
+- Use Entity Framework Core for relational databases
+- Implement repository pattern for data abstraction
+- Use migrations for database schema changes
+- Connection string management via configuration
+- Implement proper transaction handling
+- Use async database operations
+
+## Deployment & Packaging
+
+- Use ClickOnce or MSIX for application deployment
+- Implement auto-update functionality
+- Version all releases (semantic versioning)
+- Include detailed release notes
+- Test deployment process in staging environment
+- Support side-by-side installation of versions when needed
