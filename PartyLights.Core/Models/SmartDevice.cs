@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
 using System.Text.Json.Serialization;
+using System.Windows;
 
 namespace PartyLights.Core.Models;
 
@@ -661,6 +665,20 @@ public class DeviceState
     public string? CurrentScene { get; set; }
     public string? CurrentGroup { get; set; }
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Represents a frequency band for audio analysis
+/// </summary>
+public class FrequencyBand
+{
+    public string Name { get; set; } = string.Empty;
+    public float LowerFrequency { get; set; }
+    public float UpperFrequency { get; set; }
+    public float Intensity { get; set; }
+    public float PeakIntensity { get; set; }
+    public float AverageIntensity { get; set; }
+    public Color Color { get; set; } = Color.White;
 }
 
 /// <summary>

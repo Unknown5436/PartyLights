@@ -334,3 +334,18 @@ public class AudioStatistics
     public float BeatSensitivity { get; set; }
     public float CurrentTempo { get; set; }
 }
+
+/// <summary>
+/// Represents an audio device
+/// </summary>
+public class AudioDevice
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string DeviceType { get; set; } = string.Empty;
+    public bool IsDefault { get; set; }
+    public bool IsEnabled { get; set; }
+    public int Channels { get; set; }
+    public int SampleRate { get; set; }
+    public int BitsPerSample { get; set; }
+}

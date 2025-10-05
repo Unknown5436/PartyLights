@@ -103,7 +103,7 @@ public class TpLinkDeviceController : IDeviceController
             var command = new
             {
                 method = "set_device_info",
-                params = new
+                @params = new
                        {
                            hue = (int)(r * 360.0 / 255.0),
                            saturation = (int)(g * 100.0 / 255.0),
@@ -137,7 +137,7 @@ public class TpLinkDeviceController : IDeviceController
             var command = new
             {
                 method = "set_device_info",
-                params = new
+                @params = new
                        {
                            brightness = Math.Clamp(brightness, 1, 100)
                        }
@@ -192,7 +192,7 @@ public class TpLinkDeviceController : IDeviceController
             var command = new
             {
                 method = "set_device_info",
-                params = new
+                @params = new
                        {
                            on_off = 1
                        }
@@ -223,7 +223,7 @@ public class TpLinkDeviceController : IDeviceController
             var command = new
             {
                 method = "set_device_info",
-                params = new
+                @params = new
                        {
                            on_off = 0
                        }

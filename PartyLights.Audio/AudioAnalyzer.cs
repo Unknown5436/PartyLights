@@ -302,18 +302,6 @@ public class TempoEstimator
 }
 
 /// <summary>
-/// Result of audio analysis
-/// </summary>
-public class AudioAnalysisResult
-{
-    public float Volume { get; set; }
-    public float[] FrequencyBands { get; set; } = Array.Empty<float>();
-    public float SpectralCentroid { get; set; }
-    public float ZeroCrossingRate { get; set; }
-    public DateTime Timestamp { get; set; }
-}
-
-/// <summary>
 /// Result of beat detection
 /// </summary>
 public class BeatDetectionResult
