@@ -74,10 +74,22 @@ public partial class App : Application
     {
         // Core services
         services.AddSingleton<IConfigurationService, ConfigurationService>();
+        services.AddSingleton<ConfigurationManagerService>();
+        services.AddSingleton<ConfigurationUiService>();
+        services.AddSingleton<ConfigurationValidationService>();
         services.AddSingleton<IDeviceManagerService, DeviceManagerService>();
         services.AddSingleton<IAudioCaptureService, EnhancedAudioCaptureService>();
         services.AddSingleton<ISpotifyService, SpotifyService>();
         services.AddSingleton<ILightingEffectService, LightingEffectService>();
+
+        // Advanced device control services
+        services.AddSingleton<IAdvancedDeviceControlService, AdvancedDeviceControlService>();
+        services.AddSingleton<IDeviceSynchronizationService, DeviceSynchronizationService>();
+
+        // Preset management services
+        services.AddSingleton<PresetManagementService>();
+        services.AddSingleton<PresetExecutionEngine>();
+        services.AddSingleton<PresetUiService>();
 
         // Device controllers
         services.AddTransient<IDeviceController, HueDeviceController>();

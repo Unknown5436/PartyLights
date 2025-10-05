@@ -170,9 +170,9 @@ PartyLights/
 ### Phase 2: Core Services (Weeks 3-4)
 
 - [x] Audio analysis pipeline
-- [ ] Device control implementations
-- [ ] Configuration management
-- [ ] Basic preset system
+- [x] Device control implementations
+- [x] Configuration management
+- [x] Basic preset system
 
 ### Phase 3: Audio Integration (Weeks 5-6)
 

@@ -86,6 +86,77 @@ public interface IConfigurationService
 }
 
 /// <summary>
+/// Interface for advanced device control service
+/// </summary>
+public interface IAdvancedDeviceControlService
+{
+    Task<bool> SetColorToAllDevicesAsync(int r, int g, int b);
+    Task<bool> SetBrightnessToAllDevicesAsync(int brightness);
+    Task<bool> SetEffectToAllDevicesAsync(string effectName);
+    Task<bool> TurnOnAllDevicesAsync();
+    Task<bool> TurnOffAllDevicesAsync();
+
+    Task<bool> SetColorToDeviceGroupAsync(string groupName, int r, int g, int b);
+    Task<bool> SetBrightnessToDeviceGroupAsync(string groupName, int brightness);
+    Task<bool> SetEffectToDeviceGroupAsync(string groupName, string effectName);
+    Task<bool> TurnOnDeviceGroupAsync(string groupName);
+    Task<bool> TurnOffDeviceGroupAsync(string groupName);
+
+    Task<bool> SetColorToDeviceTypeAsync(DeviceType deviceType, int r, int g, int b);
+    Task<bool> SetBrightnessToDeviceTypeAsync(DeviceType deviceType, int brightness);
+    Task<bool> SetEffectToDeviceTypeAsync(DeviceType deviceType, string effectName);
+    Task<bool> TurnOnDeviceTypeAsync(DeviceType deviceType);
+    Task<bool> TurnOffDeviceTypeAsync(DeviceType deviceType);
+
+    Task<bool> CreateDeviceGroupAsync(string groupName, IEnumerable<SmartDevice> devices);
+    Task<bool> DeleteDeviceGroupAsync(string groupName);
+    Task<IEnumerable<DeviceGroup>> GetDeviceGroupsAsync();
+    Task<bool> AddDeviceToGroupAsync(string groupName, SmartDevice device);
+    Task<bool> RemoveDeviceFromGroupAsync(string groupName, SmartDevice device);
+
+    Task<bool> SaveDeviceConfigurationAsync(SmartDevice device);
+    Task<bool> LoadDeviceConfigurationAsync(SmartDevice device);
+    Task<IEnumerable<DeviceConfiguration>> GetSavedConfigurationsAsync();
+}
+
+/// <summary>
+/// Interface for device synchronization service
+/// </summary>
+public interface IDeviceSynchronizationService
+{
+    Task<bool> SynchronizeAllDevicesAsync();
+    Task<bool> SynchronizeDeviceGroupAsync(string groupName);
+    Task<bool> SynchronizeDeviceTypeAsync(DeviceType deviceType);
+    Task<bool> StartRealTimeSyncAsync();
+    Task<bool> StopRealTimeSyncAsync();
+    bool IsRealTimeSyncActive { get; }
+
+    event EventHandler<SynchronizationEventArgs>? SynchronizationStarted;
+    event EventHandler<SynchronizationEventArgs>? SynchronizationStopped;
+    event EventHandler<SynchronizationEventArgs>? SynchronizationError;
+}
+
+/// <summary>
+/// Enhanced device controller interface with advanced features
+/// </summary>
+public interface IAdvancedDeviceController : IDeviceController
+{
+    Task<bool> SetColorTemperatureAsync(int temperature);
+    Task<bool> SetSaturationAsync(int saturation);
+    Task<bool> SetHueAsync(int hue);
+    Task<bool> SetTransitionTimeAsync(int milliseconds);
+    Task<bool> SetPowerStateAsync(bool isOn);
+    Task<DeviceState?> GetDeviceStateAsync();
+    Task<bool> SetSceneAsync(string sceneName);
+    Task<IEnumerable<string>> GetAvailableScenesAsync();
+    Task<bool> SetGroupAsync(string groupName);
+    Task<IEnumerable<string>> GetAvailableGroupsAsync();
+    Task<bool> SetBrightnessWithTransitionAsync(int brightness, int transitionTime);
+    Task<bool> SetColorWithTransitionAsync(int r, int g, int b, int transitionTime);
+    Task<bool> SetEffectWithTransitionAsync(string effectName, int transitionTime);
+}
+
+/// <summary>
 /// Event arguments for device events
 /// </summary>
 public class DeviceEventArgs : EventArgs
@@ -110,4 +181,23 @@ public class SpotifyTrackEventArgs : EventArgs
 {
     public SpotifyTrack? Track { get; }
     public SpotifyTrackEventArgs(SpotifyTrack? track) => Track = track;
+}
+
+/// <summary>
+/// Event arguments for synchronization events
+/// </summary>
+public class SynchronizationEventArgs : EventArgs
+{
+    public string? GroupName { get; }
+    public DeviceType? DeviceType { get; }
+    public string? ErrorMessage { get; }
+    public DateTime Timestamp { get; }
+
+    public SynchronizationEventArgs(string? groupName = null, DeviceType? deviceType = null, string? errorMessage = null)
+    {
+        GroupName = groupName;
+        DeviceType = deviceType;
+        ErrorMessage = errorMessage;
+        Timestamp = DateTime.UtcNow;
+    }
 }
