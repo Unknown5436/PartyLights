@@ -194,16 +194,86 @@ public class PresetExecutionSettings
 }
 
 /// <summary>
-/// Audio analysis data
+/// Advanced audio analysis data with comprehensive features
 /// </summary>
 public class AudioAnalysis
 {
+    // Basic audio features
     public float Volume { get; set; }
     public float[] FrequencyBands { get; set; } = Array.Empty<float>();
     public float BeatIntensity { get; set; }
     public float Tempo { get; set; }
     public float SpectralCentroid { get; set; }
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+
+    // Advanced spectral features
+    public float SpectralRolloff { get; set; }
+    public float SpectralBandwidth { get; set; }
+    public float SpectralContrast { get; set; }
+    public float SpectralFlatness { get; set; }
+    public float SpectralFlux { get; set; }
+    public float ZeroCrossingRate { get; set; }
+    public float MFCC1 { get; set; }
+    public float MFCC2 { get; set; }
+    public float MFCC3 { get; set; }
+
+    // Rhythm and beat analysis
+    public bool IsBeatDetected { get; set; }
+    public float BeatConfidence { get; set; }
+    public float BeatStrength { get; set; }
+    public float RhythmRegularity { get; set; }
+    public float RhythmComplexity { get; set; }
+    public List<float> BeatTimes { get; set; } = new();
+    public float OnsetStrength { get; set; }
+
+    // Mood and emotion analysis
+    public float Energy { get; set; }
+    public float Valence { get; set; }
+    public float Arousal { get; set; }
+    public float Dominance { get; set; }
+    public string PredictedMood { get; set; } = string.Empty;
+    public float MoodConfidence { get; set; }
+
+    // Genre and style classification
+    public string PredictedGenre { get; set; } = string.Empty;
+    public float GenreConfidence { get; set; }
+    public Dictionary<string, float> GenreProbabilities { get; set; } = new();
+
+    // Advanced frequency analysis
+    public List<FrequencyBand> FrequencyBandsDetailed { get; set; } = new();
+    public float BassIntensity { get; set; }
+    public float MidIntensity { get; set; }
+    public float TrebleIntensity { get; set; }
+    public float SubBassIntensity { get; set; }
+    public float PresenceIntensity { get; set; }
+
+    // Dynamic range and compression
+    public float DynamicRange { get; set; }
+    public float CompressionRatio { get; set; }
+    public float PeakLevel { get; set; }
+    public float RMSLevel { get; set; }
+    public float CrestFactor { get; set; }
+
+    // Harmonic analysis
+    public float Harmonicity { get; set; }
+    public float Inharmonicity { get; set; }
+    public float FundamentalFrequency { get; set; }
+    public List<float> HarmonicFrequencies { get; set; } = new();
+    public List<float> HarmonicAmplitudes { get; set; } = new();
+
+    // Temporal features
+    public float AttackTime { get; set; }
+    public float DecayTime { get; set; }
+    public float SustainLevel { get; set; }
+    public float ReleaseTime { get; set; }
+    public float TransientStrength { get; set; }
+
+    // Quality metrics
+    public float SignalToNoiseRatio { get; set; }
+    public float DistortionLevel { get; set; }
+    public float ClippingLevel { get; set; }
+    public bool IsClipping { get; set; }
+    public float AudioQuality { get; set; }
 }
 
 /// <summary>
@@ -215,13 +285,186 @@ public class SpotifyTrack
     public string Name { get; set; } = string.Empty;
     public string Artist { get; set; } = string.Empty;
     public string Album { get; set; } = string.Empty;
-    public float Danceability { get; set; }
-    public float Energy { get; set; }
-    public float Valence { get; set; }
-    public float Tempo { get; set; }
+    public string ImageUrl { get; set; } = string.Empty;
+    public int DurationMs { get; set; }
     public bool IsPlaying { get; set; }
     public TimeSpan Duration { get; set; }
     public TimeSpan Progress { get; set; }
+    public string PreviewUrl { get; set; } = string.Empty;
+    public int Popularity { get; set; }
+    public List<string> Genres { get; set; } = new();
+    public List<string> Artists { get; set; } = new();
+    public string AlbumId { get; set; } = string.Empty;
+    public string AlbumImageUrl { get; set; } = string.Empty;
+    public DateTime ReleaseDate { get; set; }
+    public string ExternalUrl { get; set; } = string.Empty;
+    public Dictionary<string, object> AudioFeatures { get; set; } = new();
+}
+
+/// <summary>
+/// Spotify artist information
+/// </summary>
+public class SpotifyArtist
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string ImageUrl { get; set; } = string.Empty;
+    public int Popularity { get; set; }
+    public List<string> Genres { get; set; } = new();
+    public int Followers { get; set; }
+    public string ExternalUrl { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Spotify album information
+/// </summary>
+public class SpotifyAlbum
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Artist { get; set; } = string.Empty;
+    public string ImageUrl { get; set; } = string.Empty;
+    public DateTime ReleaseDate { get; set; }
+    public int TotalTracks { get; set; }
+    public string AlbumType { get; set; } = string.Empty;
+    public List<string> Genres { get; set; } = new();
+    public string ExternalUrl { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Spotify playlist information
+/// </summary>
+public class SpotifyPlaylist
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string ImageUrl { get; set; } = string.Empty;
+    public string Owner { get; set; } = string.Empty;
+    public int TotalTracks { get; set; }
+    public bool IsPublic { get; set; }
+    public bool IsCollaborative { get; set; }
+    public string ExternalUrl { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Spotify audio features
+/// </summary>
+public class SpotifyAudioFeatures
+{
+    public string TrackId { get; set; } = string.Empty;
+    public float Danceability { get; set; }
+    public float Energy { get; set; }
+    public int Key { get; set; }
+    public float Loudness { get; set; }
+    public int Mode { get; set; }
+    public float Speechiness { get; set; }
+    public float Acousticness { get; set; }
+    public float Instrumentalness { get; set; }
+    public float Liveness { get; set; }
+    public float Valence { get; set; }
+    public float Tempo { get; set; }
+    public int DurationMs { get; set; }
+    public int TimeSignature { get; set; }
+}
+
+/// <summary>
+/// Spotify playback state
+/// </summary>
+public class SpotifyPlaybackState
+{
+    public SpotifyTrack? CurrentTrack { get; set; }
+    public bool IsPlaying { get; set; }
+    public int ProgressMs { get; set; }
+    public int VolumePercent { get; set; }
+    public bool ShuffleState { get; set; }
+    public string RepeatState { get; set; } = string.Empty;
+    public SpotifyDevice? Device { get; set; }
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Spotify device information
+/// </summary>
+public class SpotifyDevice
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+    public int VolumePercent { get; set; }
+    public bool IsActive { get; set; }
+    public bool IsPrivateSession { get; set; }
+    public bool IsRestricted { get; set; }
+}
+
+/// <summary>
+/// Spotify user profile
+/// </summary>
+public class SpotifyUserProfile
+{
+    public string Id { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string ImageUrl { get; set; } = string.Empty;
+    public int Followers { get; set; }
+    public string Country { get; set; } = string.Empty;
+    public string Product { get; set; } = string.Empty;
+    public List<string> Images { get; set; } = new();
+}
+
+/// <summary>
+/// Spotify authentication token
+/// </summary>
+public class SpotifyToken
+{
+    public string AccessToken { get; set; } = string.Empty;
+    public string RefreshToken { get; set; } = string.Empty;
+    public string TokenType { get; set; } = "Bearer";
+    public int ExpiresIn { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public string Scope { get; set; } = string.Empty;
+    public bool IsValid => !string.IsNullOrEmpty(AccessToken) && DateTime.UtcNow < ExpiresAt;
+}
+
+/// <summary>
+/// Spotify search results
+/// </summary>
+public class SpotifySearchResults
+{
+    public List<SpotifyTrack> Tracks { get; set; } = new();
+    public List<SpotifyArtist> Artists { get; set; } = new();
+    public List<SpotifyAlbum> Albums { get; set; } = new();
+    public List<SpotifyPlaylist> Playlists { get; set; } = new();
+}
+
+/// <summary>
+/// Spotify API configuration
+/// </summary>
+public class SpotifyApiConfig
+{
+    public string ClientId { get; set; } = string.Empty;
+    public string ClientSecret { get; set; } = string.Empty;
+    public string RedirectUri { get; set; } = "http://localhost:8888/callback";
+    public List<string> Scopes { get; set; } = new()
+    {
+        "user-read-playback-state",
+        "user-modify-playback-state",
+        "user-read-currently-playing",
+        "user-read-recently-played",
+        "user-top-read",
+        "user-read-private",
+        "user-read-email",
+        "playlist-read-private",
+        "playlist-read-collaborative",
+        "playlist-modify-public",
+        "playlist-modify-private"
+    };
+    public string BaseUrl { get; set; } = "https://api.spotify.com/v1";
+    public string AuthUrl { get; set; } = "https://accounts.spotify.com/authorize";
+    public string TokenUrl { get; set; } = "https://accounts.spotify.com/api/token";
+    public int RequestTimeoutMs { get; set; } = 30000;
+    public int MaxRetryAttempts { get; set; } = 3;
+    public bool EnableRateLimitHandling { get; set; } = true;
 }
 
 /// <summary>
@@ -237,6 +480,7 @@ public class AppConfiguration
     public PerformanceSettings Performance { get; set; } = new();
     public SecuritySettings Security { get; set; } = new();
     public LoggingSettings Logging { get; set; } = new();
+    public SpotifySettings Spotify { get; set; } = new();
     public DateTime LastModified { get; set; } = DateTime.UtcNow;
     public string Version { get; set; } = "1.0.0";
 }
@@ -364,6 +608,33 @@ public class LoggingSettings
     public bool EnableStructuredLogging { get; set; } = true;
     public bool EnablePerformanceLogging { get; set; } = false;
     public bool EnableSecurityLogging { get; set; } = true;
+}
+
+public class SpotifySettings
+{
+    public string ClientId { get; set; } = string.Empty;
+    public string ClientSecret { get; set; } = string.Empty;
+    public string RedirectUri { get; set; } = "http://localhost:8888/callback";
+    public bool AutoConnect { get; set; } = false;
+    public bool EnableRealTimeUpdates { get; set; } = true;
+    public int UpdateIntervalMs { get; set; } = 2000;
+    public bool EnableAudioAnalysis { get; set; } = true;
+    public bool EnableMoodDetection { get; set; } = true;
+    public bool EnablePresetRecommendations { get; set; } = true;
+    public List<string> EnabledScopes { get; set; } = new()
+    {
+        "user-read-playback-state",
+        "user-modify-playback-state",
+        "user-read-currently-playing",
+        "user-read-recently-played",
+        "user-top-read",
+        "user-read-private",
+        "user-read-email",
+        "playlist-read-private",
+        "playlist-read-collaborative",
+        "playlist-modify-public",
+        "playlist-modify-private"
+    };
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

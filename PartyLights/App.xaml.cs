@@ -82,6 +82,20 @@ public partial class App : Application
         services.AddSingleton<ISpotifyService, SpotifyService>();
         services.AddSingleton<ILightingEffectService, LightingEffectService>();
 
+        // Advanced audio analysis services
+        services.AddSingleton<AdvancedAudioAnalysisService>();
+        services.AddSingleton<RealTimeAudioProcessingService>();
+
+        // Real-time effect processing services
+        services.AddSingleton<RealTimeEffectProcessingEngine>();
+        services.AddSingleton<SmoothTransitionManager>();
+        services.AddSingleton<EffectSynchronizationService>();
+
+        // Performance optimization services
+        services.AddSingleton<PerformanceOptimizationService>();
+        services.AddSingleton<AdaptiveQualityManager>();
+        services.AddSingleton<ResourceManagementService>();
+
         // Advanced device control services
         services.AddSingleton<IAdvancedDeviceControlService, AdvancedDeviceControlService>();
         services.AddSingleton<IDeviceSynchronizationService, DeviceSynchronizationService>();
@@ -90,6 +104,30 @@ public partial class App : Application
         services.AddSingleton<PresetManagementService>();
         services.AddSingleton<PresetExecutionEngine>();
         services.AddSingleton<PresetUiService>();
+
+        // Spotify services
+        services.AddSingleton<ISpotifyAuthenticationService, SpotifyAuthenticationService>();
+        services.AddSingleton<ISpotifyWebApiService, SpotifyWebApiService>();
+        services.AddSingleton<ISpotifyWebSocketService, SpotifyWebSocketService>();
+        services.AddSingleton<ISpotifyAudioAnalysisService, SpotifyAudioAnalysisService>();
+        services.AddSingleton<ISpotifyService, SpotifyService>();
+
+        // HTTP client for Spotify API
+        services.AddHttpClient<SpotifyAuthenticationService>();
+        services.AddHttpClient<SpotifyWebApiService>();
+
+        // Spotify configuration
+        services.AddSingleton<SpotifyApiConfig>(provider =>
+        {
+            var config = provider.GetRequiredService<IConfigurationService>();
+            var appConfig = config.LoadConfigurationAsync().Result;
+            return new SpotifyApiConfig
+            {
+                ClientId = appConfig.Spotify?.ClientId ?? string.Empty,
+                ClientSecret = appConfig.Spotify?.ClientSecret ?? string.Empty,
+                RedirectUri = appConfig.Spotify?.RedirectUri ?? "http://localhost:8888/callback"
+            };
+        });
 
         // Device controllers
         services.AddTransient<IDeviceController, HueDeviceController>();

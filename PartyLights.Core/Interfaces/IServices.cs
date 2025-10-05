@@ -44,6 +44,106 @@ public interface ISpotifyService
 }
 
 /// <summary>
+/// Interface for comprehensive Spotify Web API service
+/// </summary>
+public interface ISpotifyWebApiService
+{
+    // Authentication
+    Task<bool> AuthenticateAsync();
+    Task<bool> RefreshTokenAsync();
+    Task<bool> IsAuthenticatedAsync();
+    Task<SpotifyToken?> GetTokenAsync();
+    Task<bool> RevokeTokenAsync();
+
+    // User Profile
+    Task<SpotifyUserProfile?> GetUserProfileAsync();
+    Task<IEnumerable<SpotifyDevice>> GetUserDevicesAsync();
+
+    // Playback Control
+    Task<SpotifyPlaybackState?> GetPlaybackStateAsync();
+    Task<bool> PlayTrackAsync(string trackId);
+    Task<bool> PlayPlaylistAsync(string playlistId);
+    Task<bool> PausePlaybackAsync();
+    Task<bool> ResumePlaybackAsync();
+    Task<bool> SkipToNextAsync();
+    Task<bool> SkipToPreviousAsync();
+    Task<bool> SeekToPositionAsync(int positionMs);
+    Task<bool> SetVolumeAsync(int volumePercent);
+    Task<bool> SetRepeatModeAsync(string state);
+    Task<bool> SetShuffleModeAsync(bool enabled);
+
+    // Track Information
+    Task<SpotifyTrack?> GetTrackAsync(string trackId);
+    Task<SpotifyAudioFeatures?> GetTrackAudioFeaturesAsync(string trackId);
+    Task<IEnumerable<SpotifyTrack>> GetRecentlyPlayedTracksAsync(int limit = 20);
+    Task<IEnumerable<SpotifyTrack>> GetTopTracksAsync(string timeRange = "medium_term", int limit = 20);
+
+    // Search
+    Task<SpotifySearchResults?> SearchAsync(string query, string types = "track,artist,album,playlist", int limit = 20);
+    Task<IEnumerable<SpotifyTrack>> SearchTracksAsync(string query, int limit = 20);
+    Task<IEnumerable<SpotifyArtist>> SearchArtistsAsync(string query, int limit = 20);
+    Task<IEnumerable<SpotifyAlbum>> SearchAlbumsAsync(string query, int limit = 20);
+    Task<IEnumerable<SpotifyPlaylist>> SearchPlaylistsAsync(string query, int limit = 20);
+
+    // Playlists
+    Task<IEnumerable<SpotifyPlaylist>> GetUserPlaylistsAsync(int limit = 50);
+    Task<SpotifyPlaylist?> GetPlaylistAsync(string playlistId);
+    Task<IEnumerable<SpotifyTrack>> GetPlaylistTracksAsync(string playlistId, int limit = 100);
+
+    // Events
+    event EventHandler<SpotifyPlaybackStateChangedEventArgs>? PlaybackStateChanged;
+    event EventHandler<SpotifyTrackChangedEventArgs>? TrackChanged;
+    event EventHandler<SpotifyAuthenticationEventArgs>? AuthenticationChanged;
+    event EventHandler<SpotifyErrorEventArgs>? ErrorOccurred;
+}
+
+/// <summary>
+/// Interface for Spotify authentication service
+/// </summary>
+public interface ISpotifyAuthenticationService
+{
+    Task<string> GetAuthorizationUrlAsync();
+    Task<SpotifyToken?> ExchangeCodeForTokenAsync(string code);
+    Task<SpotifyToken?> RefreshAccessTokenAsync(string refreshToken);
+    Task<bool> ValidateTokenAsync(SpotifyToken token);
+    Task<bool> RevokeTokenAsync(SpotifyToken token);
+    Task<SpotifyToken?> LoadStoredTokenAsync();
+    Task<bool> StoreTokenAsync(SpotifyToken token);
+    Task<bool> ClearStoredTokenAsync();
+}
+
+/// <summary>
+/// Interface for Spotify WebSocket service for real-time updates
+/// </summary>
+public interface ISpotifyWebSocketService
+{
+    Task<bool> ConnectAsync();
+    Task<bool> DisconnectAsync();
+    bool IsConnected { get; }
+    Task<bool> SubscribeToPlaybackUpdatesAsync();
+    Task<bool> UnsubscribeFromPlaybackUpdatesAsync();
+
+    event EventHandler<SpotifyPlaybackStateChangedEventArgs>? PlaybackStateChanged;
+    event EventHandler<SpotifyTrackChangedEventArgs>? TrackChanged;
+    event EventHandler<SpotifyDeviceChangedEventArgs>? DeviceChanged;
+    event EventHandler<SpotifyConnectionEventArgs>? ConnectionChanged;
+}
+
+/// <summary>
+/// Interface for Spotify audio analysis service
+/// </summary>
+public interface ISpotifyAudioAnalysisService
+{
+    Task<SpotifyAudioFeatures?> AnalyzeTrackAsync(string trackId);
+    Task<Dictionary<string, float>> GetTrackMoodAsync(string trackId);
+    Task<string> GetTrackGenreAsync(string trackId);
+    Task<float> GetTrackEnergyLevelAsync(string trackId);
+    Task<float> GetTrackDanceabilityAsync(string trackId);
+    Task<bool> IsTrackSuitableForLightingAsync(string trackId);
+    Task<IEnumerable<string>> GetRecommendedPresetsAsync(string trackId);
+}
+
+/// <summary>
 /// Service for managing lighting effects
 /// </summary>
 public interface ILightingEffectService
@@ -198,6 +298,112 @@ public class SynchronizationEventArgs : EventArgs
         GroupName = groupName;
         DeviceType = deviceType;
         ErrorMessage = errorMessage;
+        Timestamp = DateTime.UtcNow;
+    }
+}
+
+/// <summary>
+/// Event arguments for Spotify playback state changes
+/// </summary>
+public class SpotifyPlaybackStateChangedEventArgs : EventArgs
+{
+    public SpotifyPlaybackState? PreviousState { get; }
+    public SpotifyPlaybackState? CurrentState { get; }
+    public DateTime Timestamp { get; }
+
+    public SpotifyPlaybackStateChangedEventArgs(SpotifyPlaybackState? previousState, SpotifyPlaybackState? currentState)
+    {
+        PreviousState = previousState;
+        CurrentState = currentState;
+        Timestamp = DateTime.UtcNow;
+    }
+}
+
+/// <summary>
+/// Event arguments for Spotify track changes
+/// </summary>
+public class SpotifyTrackChangedEventArgs : EventArgs
+{
+    public SpotifyTrack? PreviousTrack { get; }
+    public SpotifyTrack? CurrentTrack { get; }
+    public DateTime Timestamp { get; }
+
+    public SpotifyTrackChangedEventArgs(SpotifyTrack? previousTrack, SpotifyTrack? currentTrack)
+    {
+        PreviousTrack = previousTrack;
+        CurrentTrack = currentTrack;
+        Timestamp = DateTime.UtcNow;
+    }
+}
+
+/// <summary>
+/// Event arguments for Spotify authentication events
+/// </summary>
+public class SpotifyAuthenticationEventArgs : EventArgs
+{
+    public bool IsAuthenticated { get; }
+    public SpotifyUserProfile? UserProfile { get; }
+    public string? ErrorMessage { get; }
+    public DateTime Timestamp { get; }
+
+    public SpotifyAuthenticationEventArgs(bool isAuthenticated, SpotifyUserProfile? userProfile = null, string? errorMessage = null)
+    {
+        IsAuthenticated = isAuthenticated;
+        UserProfile = userProfile;
+        ErrorMessage = errorMessage;
+        Timestamp = DateTime.UtcNow;
+    }
+}
+
+/// <summary>
+/// Event arguments for Spotify device changes
+/// </summary>
+public class SpotifyDeviceChangedEventArgs : EventArgs
+{
+    public SpotifyDevice? PreviousDevice { get; }
+    public SpotifyDevice? CurrentDevice { get; }
+    public DateTime Timestamp { get; }
+
+    public SpotifyDeviceChangedEventArgs(SpotifyDevice? previousDevice, SpotifyDevice? currentDevice)
+    {
+        PreviousDevice = previousDevice;
+        CurrentDevice = currentDevice;
+        Timestamp = DateTime.UtcNow;
+    }
+}
+
+/// <summary>
+/// Event arguments for Spotify connection events
+/// </summary>
+public class SpotifyConnectionEventArgs : EventArgs
+{
+    public bool IsConnected { get; }
+    public string? ErrorMessage { get; }
+    public DateTime Timestamp { get; }
+
+    public SpotifyConnectionEventArgs(bool isConnected, string? errorMessage = null)
+    {
+        IsConnected = isConnected;
+        ErrorMessage = errorMessage;
+        Timestamp = DateTime.UtcNow;
+    }
+}
+
+/// <summary>
+/// Event arguments for Spotify error events
+/// </summary>
+public class SpotifyErrorEventArgs : EventArgs
+{
+    public string ErrorMessage { get; }
+    public string? ErrorCode { get; }
+    public Exception? Exception { get; }
+    public DateTime Timestamp { get; }
+
+    public SpotifyErrorEventArgs(string errorMessage, string? errorCode = null, Exception? exception = null)
+    {
+        ErrorMessage = errorMessage;
+        ErrorCode = errorCode;
+        Exception = exception;
         Timestamp = DateTime.UtcNow;
     }
 }
