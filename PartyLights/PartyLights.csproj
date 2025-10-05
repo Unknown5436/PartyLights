@@ -24,8 +24,8 @@
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
     <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="Q42.HueApi" Version="4.0.0" />
-    <PackageReference Include="System.Text.Json" Version="8.0.0" />
+    <PackageReference Include="Q42.HueApi" Version="3.23.2" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
     <PackageReference Include="ModernWpfUI" Version="0.9.6" />
   </ItemGroup>
 
