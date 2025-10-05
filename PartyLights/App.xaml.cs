@@ -105,6 +105,25 @@ public partial class App : Application
         services.AddSingleton<PresetExecutionEngine>();
         services.AddSingleton<PresetUiService>();
 
+        // Advanced preset services
+        services.AddSingleton<AdvancedPresetManagementService>();
+        services.AddSingleton<AdvancedPresetExecutionEngine>();
+
+        // Advanced UI services
+        services.AddSingleton<AdvancedUiService>();
+        services.AddSingleton<RealTimeVisualizationService>();
+        services.AddSingleton<AdvancedControlService>();
+
+        // Error handling and recovery services
+        services.AddSingleton<ErrorHandlingService>();
+        services.AddSingleton<ComprehensiveLoggingService>();
+        services.AddSingleton<SystemHealthMonitoringService>();
+
+        // Performance tuning services
+        services.AddSingleton<PerformanceProfilingService>();
+        services.AddSingleton<DynamicPerformanceOptimizationService>();
+        services.AddSingleton<ComprehensivePerformanceTuningService>();
+
         // Spotify services
         services.AddSingleton<ISpotifyAuthenticationService, SpotifyAuthenticationService>();
         services.AddSingleton<ISpotifyWebApiService, SpotifyWebApiService>();

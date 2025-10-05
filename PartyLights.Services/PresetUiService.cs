@@ -1,632 +1,980 @@
 using Microsoft.Extensions.Logging;
+using PartyLights.Core.Interfaces;
 using PartyLights.Core.Models;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
 
 namespace PartyLights.Services;
 
 /// <summary>
-/// Service for managing presets through the UI
+/// Preset UI service for managing presets through the user interface
 /// </summary>
-public class PresetUiService : INotifyPropertyChanged
+public class PresetUiService : IDisposable
 {
     private readonly ILogger<PresetUiService> _logger;
-    private readonly PresetManagementService _presetManagementService;
-    private readonly PresetExecutionEngine _presetExecutionEngine;
-    private readonly ObservableCollection<LightingPreset> _presets = new();
-    private readonly ObservableCollection<PresetCollection> _collections = new();
-    private readonly ObservableCollection<PresetTemplate> _templates = new();
-    private LightingPreset? _selectedPreset;
-    private PresetCollection? _selectedCollection;
-    private PresetExecutionContext? _activeExecution;
-    private bool _isExecuting;
+    private readonly AdvancedPresetManagementService _presetManagementService;
+    private readonly AdvancedPresetExecutionEngine _executionEngine;
+    private readonly ConcurrentDictionary<string, PresetUiState> _uiStates = new();
+    private readonly Timer _uiUpdateTimer;
+    private readonly object _lockObject = new();
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-    public event EventHandler<PresetUiEventArgs>? PresetSelected;
-    public event EventHandler<PresetUiEventArgs>? PresetExecuted;
-    public event EventHandler<PresetUiEventArgs>? PresetStopped;
+    private const int UiUpdateIntervalMs = 100; // 10 FPS for UI updates
+    private bool _isUpdating;
+
+    // UI state management
+    private readonly Dictionary<string, PresetEditorState> _editorStates = new();
+    private readonly Dictionary<string, PresetPreviewState> _previewStates = new();
+    private readonly Dictionary<string, PresetLibraryState> _libraryStates = new();
+
+    public event EventHandler<PresetUiEventArgs>? PresetUiUpdated;
+    public event EventHandler<PresetEditorEventArgs>? PresetEditorUpdated;
+    public event EventHandler<PresetPreviewEventArgs>? PresetPreviewUpdated;
+    public event EventHandler<PresetLibraryEventArgs>? PresetLibraryUpdated;
 
     public PresetUiService(
         ILogger<PresetUiService> logger,
-        PresetManagementService presetManagementService,
-        PresetExecutionEngine presetExecutionEngine)
+        AdvancedPresetManagementService presetManagementService,
+        AdvancedPresetExecutionEngine executionEngine)
     {
         _logger = logger;
         _presetManagementService = presetManagementService;
-        _presetExecutionEngine = presetExecutionEngine;
+        _executionEngine = executionEngine;
 
-        // Subscribe to preset management events
-        _presetManagementService.PresetCreated += OnPresetCreated;
-        _presetManagementService.PresetUpdated += OnPresetUpdated;
-        _presetManagementService.PresetDeleted += OnPresetDeleted;
-        _presetManagementService.PresetStarted += OnPresetStarted;
-        _presetManagementService.PresetStopped += OnPresetStopped;
+        _uiUpdateTimer = new Timer(UpdateUiStates, null, UiUpdateIntervalMs, UiUpdateIntervalMs);
+        _isUpdating = true;
 
-        // Subscribe to execution engine events
-        _presetExecutionEngine.PresetExecutionStarted += OnPresetExecutionStarted;
-        _presetExecutionEngine.PresetExecutionStopped += OnPresetExecutionStopped;
-        _presetExecutionEngine.PresetExecutionError += OnPresetExecutionError;
-
-        // Load initial data
-        _ = LoadPresetsAsync();
-        _ = LoadCollectionsAsync();
-        _ = LoadTemplatesAsync();
+        _logger.LogInformation("Preset UI service initialized");
     }
-
-    #region Properties
-
-    public ObservableCollection<LightingPreset> Presets => _presets;
-    public ObservableCollection<PresetCollection> Collections => _collections;
-    public ObservableCollection<PresetTemplate> Templates => _templates;
-
-    public LightingPreset? SelectedPreset
-    {
-        get => _selectedPreset;
-        set
-        {
-            if (_selectedPreset != value)
-            {
-                _selectedPreset = value;
-                OnPropertyChanged();
-                PresetSelected?.Invoke(this, new PresetUiEventArgs(value));
-            }
-        }
-    }
-
-    public PresetCollection? SelectedCollection
-    {
-        get => _selectedCollection;
-        set
-        {
-            if (_selectedCollection != value)
-            {
-                _selectedCollection = value;
-                OnPropertyChanged();
-            }
-        }
-    }
-
-    public PresetExecutionContext? ActiveExecution
-    {
-        get => _activeExecution;
-        private set
-        {
-            if (_activeExecution != value)
-            {
-                _activeExecution = value;
-                OnPropertyChanged();
-            }
-        }
-    }
-
-    public bool IsExecuting
-    {
-        get => _isExecuting;
-        private set
-        {
-            if (_isExecuting != value)
-            {
-                _isExecuting = value;
-                OnPropertyChanged();
-            }
-        }
-    }
-
-    public IEnumerable<LightingPreset> BuiltInPresets => _presets.Where(p => p.IsBuiltIn);
-    public IEnumerable<LightingPreset> UserPresets => _presets.Where(p => !p.IsBuiltIn);
-    public IEnumerable<LightingPreset> EnabledPresets => _presets.Where(p => p.IsEnabled);
-
-    #endregion
-
-    #region Preset Management
 
     /// <summary>
-    /// Creates a new preset
+    /// Opens a preset editor
     /// </summary>
-    public async Task<LightingPreset?> CreatePresetAsync(string name, string description, PresetType type, Dictionary<string, object> parameters)
+    public async Task<string> OpenPresetEditorAsync(PresetEditorRequest request)
     {
         try
         {
-            var preset = new LightingPreset
+            var editorId = Guid.NewGuid().ToString();
+
+            var editorState = new PresetEditorState
             {
-                Id = Guid.NewGuid().ToString(),
-                Name = name,
-                Description = description,
-                Type = type,
-                Parameters = parameters,
-                IsBuiltIn = false,
-                CreatedAt = DateTime.UtcNow,
+                EditorId = editorId,
+                PresetId = request.PresetId,
+                Mode = request.Mode,
+                IsActive = true,
+                CreatedTime = DateTime.UtcNow,
                 LastModified = DateTime.UtcNow,
-                Author = "User"
+                HasUnsavedChanges = false,
+                ValidationErrors = new List<string>(),
+                PreviewEnabled = request.PreviewEnabled,
+                AutoSaveEnabled = request.AutoSaveEnabled
             };
 
-            var createdPreset = await _presetManagementService.CreatePresetAsync(preset);
-            return createdPreset;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating preset: {PresetName}", name);
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Updates an existing preset
-    /// </summary>
-    public async Task<bool> UpdatePresetAsync(LightingPreset preset)
-    {
-        try
-        {
-            return await _presetManagementService.UpdatePresetAsync(preset);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating preset: {PresetId}", preset.Id);
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Deletes a preset
-    /// </summary>
-    public async Task<bool> DeletePresetAsync(string presetId)
-    {
-        try
-        {
-            var success = await _presetManagementService.DeletePresetAsync(presetId);
-            if (success && SelectedPreset?.Id == presetId)
+            // Load preset if editing existing
+            if (!string.IsNullOrEmpty(request.PresetId))
             {
-                SelectedPreset = null;
-            }
-            return success;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting preset: {PresetId}", presetId);
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Duplicates a preset
-    /// </summary>
-    public async Task<LightingPreset?> DuplicatePresetAsync(string presetId, string newName)
-    {
-        try
-        {
-            var originalPreset = await _presetManagementService.GetPresetAsync(presetId);
-            if (originalPreset == null)
-            {
-                return null;
-            }
-
-            var duplicatedPreset = new LightingPreset
-            {
-                Id = Guid.NewGuid().ToString(),
-                Name = newName,
-                Description = $"Copy of {originalPreset.Name}",
-                Type = originalPreset.Type,
-                Parameters = new Dictionary<string, object>(originalPreset.Parameters),
-                DeviceIds = new List<string>(originalPreset.DeviceIds),
-                DeviceGroupIds = new List<string>(originalPreset.DeviceGroupIds),
-                IsBuiltIn = false,
-                CreatedAt = DateTime.UtcNow,
-                LastModified = DateTime.UtcNow,
-                Author = "User",
-                Metadata = new PresetMetadata
+                var preset = _presetManagementService.GetPreset(request.PresetId);
+                if (preset != null)
                 {
-                    Category = originalPreset.Metadata.Category,
-                    Difficulty = originalPreset.Metadata.Difficulty,
-                    EnergyLevel = originalPreset.Metadata.EnergyLevel,
-                    CompatibleGenres = new List<string>(originalPreset.Metadata.CompatibleGenres),
-                    CompatibleMoods = new List<string>(originalPreset.Metadata.CompatibleMoods),
-                    EstimatedBPM = originalPreset.Metadata.EstimatedBPM,
-                    ColorScheme = originalPreset.Metadata.ColorScheme,
-                    RequiresBeatDetection = originalPreset.Metadata.RequiresBeatDetection,
-                    RequiresFrequencyAnalysis = originalPreset.Metadata.RequiresFrequencyAnalysis,
-                    RequiresMoodDetection = originalPreset.Metadata.RequiresMoodDetection
+                    editorState.Preset = preset;
+                    editorState.OriginalPreset = ClonePreset(preset);
                 }
-            };
-
-            return await _presetManagementService.CreatePresetAsync(duplicatedPreset);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error duplicating preset: {PresetId}", presetId);
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Creates a preset from a template
-    /// </summary>
-    public async Task<LightingPreset?> CreatePresetFromTemplateAsync(string templateId, string name, string description)
-    {
-        try
-        {
-            return await _presetManagementService.CreatePresetFromTemplateAsync(templateId, name, description);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating preset from template: {TemplateId}", templateId);
-            return null;
-        }
-    }
-
-    #endregion
-
-    #region Preset Execution
-
-    /// <summary>
-    /// Starts executing a preset
-    /// </summary>
-    public async Task<bool> StartPresetAsync(string presetId, PresetExecutionSettings? settings = null)
-    {
-        try
-        {
-            var preset = await _presetManagementService.GetPresetAsync(presetId);
-            if (preset == null)
+            }
+            else
             {
+                // Create new preset
+                editorState.Preset = new LightingPreset
+                {
+                    Id = string.Empty,
+                    Name = "New Preset",
+                    Description = string.Empty,
+                    Category = PresetCategory.Custom,
+                    Type = PresetType.Custom,
+                    Metadata = new PresetMetadata
+                    {
+                        CreatedBy = "User",
+                        CreatedAt = DateTime.UtcNow,
+                        LastModified = DateTime.UtcNow,
+                        Version = "1.0.0",
+                        Tags = new List<string>()
+                    },
+                    Effects = new List<EffectConfiguration>(),
+                    DeviceGroups = new List<DeviceGroupConfiguration>(),
+                    AudioSettings = new AudioPresetSettings(),
+                    ExecutionSettings = new PresetExecutionSettings(),
+                    CustomParameters = new Dictionary<string, object>()
+                };
+            }
+
+            lock (_lockObject)
+            {
+                _editorStates[editorId] = editorState;
+            }
+
+            PresetEditorUpdated?.Invoke(this, new PresetEditorEventArgs(editorId, PresetEditorAction.Opened));
+            _logger.LogInformation("Opened preset editor: {EditorId}", editorId);
+
+            return editorId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error opening preset editor");
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Updates preset in editor
+    /// </summary>
+    public async Task<bool> UpdatePresetInEditorAsync(string editorId, PresetUpdateRequest request)
+    {
+        try
+        {
+            if (!_editorStates.TryGetValue(editorId, out var editorState))
+            {
+                _logger.LogWarning("Editor not found: {EditorId}", editorId);
                 return false;
             }
 
-            var context = new PresetExecutionContext
+            // Update preset
+            var updateRequest = new PresetUpdateRequest
             {
+                Name = request.Name,
+                Description = request.Description,
+                Category = request.Category,
+                Type = request.Type,
+                Tags = request.Tags,
+                Difficulty = request.Difficulty,
+                EstimatedDuration = request.EstimatedDuration,
+                Effects = request.Effects,
+                DeviceGroups = request.DeviceGroups,
+                AudioSettings = request.AudioSettings,
+                ExecutionSettings = request.ExecutionSettings,
+                CustomParameters = request.CustomParameters
+            };
+
+            var success = await _presetManagementService.UpdatePresetAsync(editorState.PresetId, updateRequest);
+
+            if (success)
+            {
+                editorState.LastModified = DateTime.UtcNow;
+                editorState.HasUnsavedChanges = false;
+
+                // Reload preset
+                var updatedPreset = _presetManagementService.GetPreset(editorState.PresetId);
+                if (updatedPreset != null)
+                {
+                    editorState.Preset = updatedPreset;
+                }
+            }
+
+            PresetEditorUpdated?.Invoke(this, new PresetEditorEventArgs(editorId, PresetEditorAction.Updated));
+            return success;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating preset in editor: {EditorId}", editorId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Saves preset from editor
+    /// </summary>
+    public async Task<bool> SavePresetFromEditorAsync(string editorId)
+    {
+        try
+        {
+            if (!_editorStates.TryGetValue(editorId, out var editorState))
+            {
+                _logger.LogWarning("Editor not found: {EditorId}", editorId);
+                return false;
+            }
+
+            // Validate preset
+            var validationResult = ValidatePreset(editorState.Preset);
+            if (!validationResult.IsValid)
+            {
+                editorState.ValidationErrors = validationResult.Errors;
+                PresetEditorUpdated?.Invoke(this, new PresetEditorEventArgs(editorId, PresetEditorAction.ValidationFailed));
+                return false;
+            }
+
+            bool success;
+            if (string.IsNullOrEmpty(editorState.PresetId))
+            {
+                // Create new preset
+                var createRequest = new PresetCreationRequest
+                {
+                    Name = editorState.Preset.Name,
+                    Description = editorState.Preset.Description,
+                    Category = editorState.Preset.Category,
+                    Type = editorState.Preset.Type,
+                    CreatedBy = "User",
+                    Tags = editorState.Preset.Metadata.Tags,
+                    Difficulty = editorState.Preset.Metadata.Difficulty,
+                    EstimatedDuration = editorState.Preset.Metadata.EstimatedDuration,
+                    Effects = editorState.Preset.Effects,
+                    DeviceGroups = editorState.Preset.DeviceGroups,
+                    AudioSettings = editorState.Preset.AudioSettings,
+                    ExecutionSettings = editorState.Preset.ExecutionSettings,
+                    CustomParameters = editorState.Preset.CustomParameters
+                };
+
+                var presetId = await _presetManagementService.CreatePresetAsync(createRequest);
+                success = !string.IsNullOrEmpty(presetId);
+
+                if (success)
+                {
+                    editorState.PresetId = presetId;
+                }
+            }
+            else
+            {
+                // Update existing preset
+                var updateRequest = new PresetUpdateRequest
+                {
+                    Name = editorState.Preset.Name,
+                    Description = editorState.Preset.Description,
+                    Category = editorState.Preset.Category,
+                    Type = editorState.Preset.Type,
+                    Tags = editorState.Preset.Metadata.Tags,
+                    Difficulty = editorState.Preset.Metadata.Difficulty,
+                    EstimatedDuration = editorState.Preset.Metadata.EstimatedDuration,
+                    Effects = editorState.Preset.Effects,
+                    DeviceGroups = editorState.Preset.DeviceGroups,
+                    AudioSettings = editorState.Preset.AudioSettings,
+                    ExecutionSettings = editorState.Preset.ExecutionSettings,
+                    CustomParameters = editorState.Preset.CustomParameters
+                };
+
+                success = await _presetManagementService.UpdatePresetAsync(editorState.PresetId, updateRequest);
+            }
+
+            if (success)
+            {
+                editorState.HasUnsavedChanges = false;
+                editorState.ValidationErrors.Clear();
+                PresetEditorUpdated?.Invoke(this, new PresetEditorEventArgs(editorId, PresetEditorAction.Saved));
+            }
+
+            return success;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving preset from editor: {EditorId}", editorId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Closes preset editor
+    /// </summary>
+    public async Task<bool> ClosePresetEditorAsync(string editorId)
+    {
+        try
+        {
+            if (!_editorStates.TryGetValue(editorId, out var editorState))
+            {
+                _logger.LogWarning("Editor not found: {EditorId}", editorId);
+                return false;
+            }
+
+            // Check for unsaved changes
+            if (editorState.HasUnsavedChanges)
+            {
+                // This would typically show a confirmation dialog
+                // For now, we'll just log a warning
+                _logger.LogWarning("Closing editor with unsaved changes: {EditorId}", editorId);
+            }
+
+            lock (_lockObject)
+            {
+                _editorStates.Remove(editorId);
+            }
+
+            PresetEditorUpdated?.Invoke(this, new PresetEditorEventArgs(editorId, PresetEditorAction.Closed));
+            _logger.LogInformation("Closed preset editor: {EditorId}", editorId);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error closing preset editor: {EditorId}", editorId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Starts preset preview
+    /// </summary>
+    public async Task<string> StartPresetPreviewAsync(string presetId, PreviewSettings? settings = null)
+    {
+        try
+        {
+            var previewId = Guid.NewGuid().ToString();
+            settings ??= new PreviewSettings();
+
+            var previewState = new PresetPreviewState
+            {
+                PreviewId = previewId,
                 PresetId = presetId,
-                TargetDeviceIds = preset.DeviceIds.ToList(),
-                TargetDeviceGroupIds = preset.DeviceGroupIds.ToList(),
-                RuntimeParameters = new Dictionary<string, object>(preset.Parameters),
-                Settings = settings ?? new PresetExecutionSettings()
+                Settings = settings,
+                IsActive = true,
+                StartTime = DateTime.UtcNow,
+                ExecutionId = string.Empty
             };
 
-            var success = await _presetExecutionEngine.StartPresetExecutionAsync(context);
-            if (success)
+            // Get preset
+            var preset = _presetManagementService.GetPreset(presetId);
+            if (preset == null)
             {
-                ActiveExecution = context;
-                IsExecuting = true;
-                PresetExecuted?.Invoke(this, new PresetUiEventArgs(preset));
+                _logger.LogWarning("Preset not found for preview: {PresetId}", presetId);
+                return string.Empty;
             }
 
-            return success;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error starting preset: {PresetId}", presetId);
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Stops executing a preset
-    /// </summary>
-    public async Task<bool> StopPresetAsync(string presetId)
-    {
-        try
-        {
-            var success = await _presetExecutionEngine.StopPresetExecutionAsync(presetId);
-            if (success)
+            // Start execution
+            var executionRequest = new PresetExecutionRequest
             {
-                if (ActiveExecution?.PresetId == presetId)
+                Preset = preset,
+                Settings = new PresetExecutionSettings
                 {
-                    ActiveExecution = null;
-                    IsExecuting = false;
+                    Duration = settings.Duration,
+                    LoopEnabled = settings.LoopEnabled,
+                    AutoStop = settings.AutoStop,
+                    PreviewMode = true
                 }
-
-                var preset = await _presetManagementService.GetPresetAsync(presetId);
-                if (preset != null)
-                {
-                    PresetStopped?.Invoke(this, new PresetUiEventArgs(preset));
-                }
-            }
-
-            return success;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error stopping preset: {PresetId}", presetId);
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Stops all preset executions
-    /// </summary>
-    public async Task<bool> StopAllPresetsAsync()
-    {
-        try
-        {
-            var success = await _presetExecutionEngine.StopAllPresetExecutionsAsync();
-            if (success)
-            {
-                ActiveExecution = null;
-                IsExecuting = false;
-            }
-
-            return success;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error stopping all presets");
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Gets active preset executions
-    /// </summary>
-    public async Task<IEnumerable<PresetExecutionContext>> GetActiveExecutionsAsync()
-    {
-        return await _presetExecutionEngine.GetActiveExecutionsAsync();
-    }
-
-    #endregion
-
-    #region Preset Collections
-
-    /// <summary>
-    /// Creates a preset collection
-    /// </summary>
-    public async Task<PresetCollection?> CreateCollectionAsync(string name, string description, PresetCategory category, List<string> presetIds)
-    {
-        try
-        {
-            var collection = new PresetCollection
-            {
-                Id = Guid.NewGuid().ToString(),
-                Name = name,
-                Description = description,
-                PresetIds = presetIds,
-                Category = category,
-                CreatedAt = DateTime.UtcNow,
-                LastModified = DateTime.UtcNow,
-                Author = "User"
             };
 
-            return await _presetManagementService.CreateCollectionAsync(collection);
+            var executionId = await _executionEngine.ExecutePresetAsync(executionRequest);
+            if (!string.IsNullOrEmpty(executionId))
+            {
+                previewState.ExecutionId = executionId;
+
+                lock (_lockObject)
+                {
+                    _previewStates[previewId] = previewState;
+                }
+
+                PresetPreviewUpdated?.Invoke(this, new PresetPreviewEventArgs(previewId, PresetPreviewAction.Started));
+                _logger.LogInformation("Started preset preview: {PresetId} ({PreviewId})", presetId, previewId);
+
+                return previewId;
+            }
+
+            return string.Empty;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating collection: {CollectionName}", name);
-            return null;
+            _logger.LogError(ex, "Error starting preset preview: {PresetId}", presetId);
+            return string.Empty;
         }
     }
 
     /// <summary>
-    /// Gets presets in a collection
+    /// Stops preset preview
     /// </summary>
-    public async Task<IEnumerable<LightingPreset>> GetPresetsInCollectionAsync(string collectionId)
+    public async Task<bool> StopPresetPreviewAsync(string previewId)
     {
-        return await _presetManagementService.GetPresetsInCollectionAsync(collectionId);
-    }
-
-    #endregion
-
-    #region Preset Filtering and Search
-
-    /// <summary>
-    /// Filters presets by type
-    /// </summary>
-    public IEnumerable<LightingPreset> FilterPresetsByType(PresetType type)
-    {
-        return _presets.Where(p => p.Type == type);
-    }
-
-    /// <summary>
-    /// Filters presets by category
-    /// </summary>
-    public IEnumerable<LightingPreset> FilterPresetsByCategory(string category)
-    {
-        return _presets.Where(p => p.Metadata.Category.Equals(category, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    /// Searches presets by name or description
-    /// </summary>
-    public IEnumerable<LightingPreset> SearchPresets(string searchTerm)
-    {
-        if (string.IsNullOrWhiteSpace(searchTerm))
+        try
         {
-            return _presets;
+            if (!_previewStates.TryGetValue(previewId, out var previewState))
+            {
+                _logger.LogWarning("Preview not found: {PreviewId}", previewId);
+                return false;
+            }
+
+            // Stop execution
+            if (!string.IsNullOrEmpty(previewState.ExecutionId))
+            {
+                await _executionEngine.StopExecutionAsync(previewState.ExecutionId);
+            }
+
+            previewState.IsActive = false;
+            previewState.EndTime = DateTime.UtcNow;
+
+            lock (_lockObject)
+            {
+                _previewStates.Remove(previewId);
+            }
+
+            PresetPreviewUpdated?.Invoke(this, new PresetPreviewEventArgs(previewId, PresetPreviewAction.Stopped));
+            _logger.LogInformation("Stopped preset preview: {PreviewId}", previewId);
+
+            return true;
         }
-
-        var term = searchTerm.ToLowerInvariant();
-        return _presets.Where(p =>
-            p.Name.ToLowerInvariant().Contains(term) ||
-            p.Description.ToLowerInvariant().Contains(term) ||
-            p.Tags.Any(tag => tag.ToLowerInvariant().Contains(term))
-        );
-    }
-
-    /// <summary>
-    /// Gets presets by energy level
-    /// </summary>
-    public IEnumerable<LightingPreset> GetPresetsByEnergyLevel(int energyLevel)
-    {
-        return _presets.Where(p => p.Metadata.EnergyLevel == energyLevel);
-    }
-
-    /// <summary>
-    /// Gets presets by difficulty
-    /// </summary>
-    public IEnumerable<LightingPreset> GetPresetsByDifficulty(int difficulty)
-    {
-        return _presets.Where(p => p.Metadata.Difficulty == difficulty);
-    }
-
-    #endregion
-
-    #region Preset Statistics
-
-    /// <summary>
-    /// Gets preset statistics
-    /// </summary>
-    public PresetStatistics GetPresetStatistics()
-    {
-        return new PresetStatistics
+        catch (Exception ex)
         {
-            TotalPresets = _presets.Count,
-            BuiltInPresets = _presets.Count(p => p.IsBuiltIn),
-            UserPresets = _presets.Count(p => !p.IsBuiltIn),
-            EnabledPresets = _presets.Count(p => p.IsEnabled),
-            PresetsByType = _presets.GroupBy(p => p.Type).ToDictionary(g => g.Key, g => g.Count()),
-            PresetsByCategory = _presets.GroupBy(p => p.Metadata.Category).ToDictionary(g => g.Key, g => g.Count()),
-            AverageEnergyLevel = _presets.Any() ? _presets.Average(p => p.Metadata.EnergyLevel) : 0,
-            AverageDifficulty = _presets.Any() ? _presets.Average(p => p.Metadata.Difficulty) : 0
-        };
+            _logger.LogError(ex, "Error stopping preset preview: {PreviewId}", previewId);
+            return false;
+        }
     }
 
-    #endregion
+    /// <summary>
+    /// Gets preset library data
+    /// </summary>
+    public PresetLibraryData GetPresetLibraryData(PresetLibraryFilter? filter = null)
+    {
+        try
+        {
+            var presets = _presetManagementService.GetPresets(filter?.ToPresetFilter());
+
+            var libraryData = new PresetLibraryData
+            {
+                Presets = presets.Select(p => new PresetLibraryItem
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    Description = p.Description,
+                    Category = p.Category,
+                    Type = p.Type,
+                    Tags = p.Metadata.Tags,
+                    Difficulty = p.Metadata.Difficulty,
+                    CreatedBy = p.Metadata.CreatedBy,
+                    CreatedAt = p.Metadata.CreatedAt,
+                    LastModified = p.Metadata.LastModified,
+                    EffectCount = p.Effects.Count,
+                    DeviceGroupCount = p.DeviceGroups.Count,
+                    IsExecutable = IsPresetExecutable(p),
+                    PreviewAvailable = IsPresetPreviewAvailable(p)
+                }).ToList(),
+
+                Categories = presets.GroupBy(p => p.Category)
+                    .ToDictionary(g => g.Key, g => g.Count()),
+
+                Types = presets.GroupBy(p => p.Type)
+                    .ToDictionary(g => g.Key, g => g.Count()),
+
+                Tags = presets.SelectMany(p => p.Metadata.Tags)
+                    .GroupBy(t => t)
+                    .ToDictionary(g => g.Key, g => g.Count()),
+
+                TotalCount = presets.Count(),
+                FilteredCount = presets.Count()
+            };
+
+            return libraryData;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting preset library data");
+            return new PresetLibraryData();
+        }
+    }
+
+    /// <summary>
+    /// Gets editor state
+    /// </summary>
+    public PresetEditorState? GetEditorState(string editorId)
+    {
+        _editorStates.TryGetValue(editorId, out var state);
+        return state;
+    }
+
+    /// <summary>
+    /// Gets preview state
+    /// </summary>
+    public PresetPreviewState? GetPreviewState(string previewId)
+    {
+        _previewStates.TryGetValue(previewId, out var state);
+        return state;
+    }
 
     #region Private Methods
 
-    private async Task LoadPresetsAsync()
+    private async void UpdateUiStates(object? state)
     {
+        if (!_isUpdating)
+        {
+            return;
+        }
+
         try
         {
-            var presets = await _presetManagementService.GetAllPresetsAsync();
-
-            _presets.Clear();
-            foreach (var preset in presets)
+            // Update editor states
+            foreach (var editorEntry in _editorStates)
             {
-                _presets.Add(preset);
+                var editorId = editorEntry.Key;
+                var editorState = editorEntry.Value;
+
+                if (editorState.IsActive)
+                {
+                    await UpdateEditorState(editorId, editorState);
+                }
             }
 
-            _logger.LogInformation("Loaded {Count} presets", _presets.Count);
+            // Update preview states
+            foreach (var previewEntry in _previewStates)
+            {
+                var previewId = previewEntry.Key;
+                var previewState = previewEntry.Value;
+
+                if (previewState.IsActive)
+                {
+                    await UpdatePreviewState(previewId, previewState);
+                }
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading presets");
+            _logger.LogError(ex, "Error updating UI states");
         }
     }
 
-    private async Task LoadCollectionsAsync()
+    private async Task UpdateEditorState(string editorId, PresetEditorState editorState)
     {
         try
         {
-            var collections = await _presetManagementService.GetAllCollectionsAsync();
-
-            _collections.Clear();
-            foreach (var collection in collections)
+            // Update editor state based on current execution status
+            if (!string.IsNullOrEmpty(editorState.PreviewExecutionId))
             {
-                _collections.Add(collection);
+                var executionStatus = _executionEngine.GetExecutionStatus(editorState.PreviewExecutionId);
+                if (executionStatus != null)
+                {
+                    editorState.PreviewProgress = executionStatus.PhaseProgress;
+                    editorState.PreviewPhase = executionStatus.CurrentPhase;
+                }
             }
 
-            _logger.LogInformation("Loaded {Count} collections", _collections.Count);
+            PresetEditorUpdated?.Invoke(this, new PresetEditorEventArgs(editorId, PresetEditorAction.Updated));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading collections");
+            _logger.LogError(ex, "Error updating editor state: {EditorId}", editorId);
         }
     }
 
-    private async Task LoadTemplatesAsync()
+    private async Task UpdatePreviewState(string previewId, PresetPreviewState previewState)
     {
         try
         {
-            var templates = await _presetManagementService.GetAllTemplatesAsync();
-
-            _templates.Clear();
-            foreach (var template in templates)
+            // Update preview state based on execution status
+            if (!string.IsNullOrEmpty(previewState.ExecutionId))
             {
-                _templates.Add(template);
-            }
+                var executionStatus = _executionEngine.GetExecutionStatus(previewState.ExecutionId);
+                if (executionStatus != null)
+                {
+                    previewState.Progress = executionStatus.PhaseProgress;
+                    previewState.CurrentPhase = executionStatus.CurrentPhase;
+                    previewState.ElapsedTime = executionStatus.ElapsedTime;
 
-            _logger.LogInformation("Loaded {Count} templates", _templates.Count);
+                    // Check if execution is complete
+                    if (!executionStatus.IsActive)
+                    {
+                        previewState.IsActive = false;
+                        previewState.EndTime = DateTime.UtcNow;
+
+                        lock (_lockObject)
+                        {
+                            _previewStates.Remove(previewId);
+                        }
+
+                        PresetPreviewUpdated?.Invoke(this, new PresetPreviewEventArgs(previewId, PresetPreviewAction.Completed));
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading templates");
+            _logger.LogError(ex, "Error updating preview state: {PreviewId}", previewId);
         }
     }
 
-    private void OnPresetCreated(object? sender, PresetEventArgs e)
+    private PresetValidationResult ValidatePreset(LightingPreset preset)
     {
-        _presets.Add(e.Preset);
-    }
+        var result = new PresetValidationResult { IsValid = true, Errors = new List<string>() };
 
-    private void OnPresetUpdated(object? sender, PresetEventArgs e)
-    {
-        var existingPreset = _presets.FirstOrDefault(p => p.Id == e.Preset.Id);
-        if (existingPreset != null)
+        // Validate name
+        if (string.IsNullOrWhiteSpace(preset.Name))
         {
-            var index = _presets.IndexOf(existingPreset);
-            _presets[index] = e.Preset;
+            result.Errors.Add("Preset name is required");
+            result.IsValid = false;
         }
-    }
 
-    private void OnPresetDeleted(object? sender, PresetEventArgs e)
-    {
-        var presetToRemove = _presets.FirstOrDefault(p => p.Id == e.Preset.Id);
-        if (presetToRemove != null)
+        // Validate effects
+        if (preset.Effects == null || !preset.Effects.Any())
         {
-            _presets.Remove(presetToRemove);
+            result.Errors.Add("At least one effect is required");
+            result.IsValid = false;
         }
-    }
 
-    private void OnPresetStarted(object? sender, PresetExecutionEventArgs e)
-    {
-        // Update UI state if needed
-    }
-
-    private void OnPresetStopped(object? sender, PresetExecutionEventArgs e)
-    {
-        // Update UI state if needed
-    }
-
-    private void OnPresetExecutionStarted(object? sender, PresetExecutionEventArgs e)
-    {
-        ActiveExecution = e.Context;
-        IsExecuting = true;
-    }
-
-    private void OnPresetExecutionStopped(object? sender, PresetExecutionEventArgs e)
-    {
-        if (ActiveExecution?.ExecutionId == e.Context.ExecutionId)
+        // Validate device groups
+        if (preset.DeviceGroups == null || !preset.DeviceGroups.Any())
         {
-            ActiveExecution = null;
-            IsExecuting = false;
+            result.Errors.Add("At least one device group is required");
+            result.IsValid = false;
         }
+
+        // Validate effect configurations
+        foreach (var effect in preset.Effects)
+        {
+            if (string.IsNullOrWhiteSpace(effect.Name))
+            {
+                result.Errors.Add($"Effect name is required for effect {preset.Effects.IndexOf(effect) + 1}");
+                result.IsValid = false;
+            }
+        }
+
+        return result;
     }
 
-    private void OnPresetExecutionError(object? sender, PresetExecutionErrorEventArgs e)
+    private LightingPreset ClonePreset(LightingPreset preset)
     {
-        _logger.LogError("Preset execution error: {PresetId} - {ErrorMessage}", e.PresetId, e.ErrorMessage);
+        // Simple clone implementation
+        return new LightingPreset
+        {
+            Id = preset.Id,
+            Name = preset.Name,
+            Description = preset.Description,
+            Category = preset.Category,
+            Type = preset.Type,
+            Metadata = preset.Metadata,
+            Effects = preset.Effects.ToList(),
+            DeviceGroups = preset.DeviceGroups.ToList(),
+            AudioSettings = preset.AudioSettings,
+            ExecutionSettings = preset.ExecutionSettings,
+            CustomParameters = new Dictionary<string, object>(preset.CustomParameters)
+        };
     }
 
-    private void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
+    private bool IsPresetExecutable(LightingPreset preset)
     {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        // Check if preset has required components for execution
+        return preset.Effects.Any() && preset.DeviceGroups.Any();
+    }
+
+    private bool IsPresetPreviewAvailable(LightingPreset preset)
+    {
+        // Check if preset can be previewed
+        return IsPresetExecutable(preset) && preset.Effects.All(e => e.Type != EffectType.Custom);
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    public void Dispose()
+    {
+        try
+        {
+            _isUpdating = false;
+            _uiUpdateTimer?.Dispose();
+
+            // Close all editors
+            var editorIds = _editorStates.Keys.ToList();
+            foreach (var editorId in editorIds)
+            {
+                ClosePresetEditorAsync(editorId).Wait(1000);
+            }
+
+            // Stop all previews
+            var previewIds = _previewStates.Keys.ToList();
+            foreach (var previewId in previewIds)
+            {
+                StopPresetPreviewAsync(previewId).Wait(1000);
+            }
+
+            _logger.LogInformation("Preset UI service disposed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error disposing preset UI service");
+        }
     }
 
     #endregion
 }
 
+#region Data Models
+
 /// <summary>
-/// Preset statistics
+/// Preset editor request
 /// </summary>
-public class PresetStatistics
+public class PresetEditorRequest
 {
-    public int TotalPresets { get; set; }
-    public int BuiltInPresets { get; set; }
-    public int UserPresets { get; set; }
-    public int EnabledPresets { get; set; }
-    public Dictionary<PresetType, int> PresetsByType { get; set; } = new();
-    public Dictionary<string, int> PresetsByCategory { get; set; } = new();
-    public double AverageEnergyLevel { get; set; }
-    public double AverageDifficulty { get; set; }
+    public string? PresetId { get; set; }
+    public PresetEditorMode Mode { get; set; } = PresetEditorMode.Edit;
+    public bool PreviewEnabled { get; set; } = true;
+    public bool AutoSaveEnabled { get; set; } = false;
 }
 
 /// <summary>
-/// Event arguments for preset UI events
+/// Preview settings
+/// </summary>
+public class PreviewSettings
+{
+    public TimeSpan Duration { get; set; } = TimeSpan.FromMinutes(1);
+    public bool LoopEnabled { get; set; } = false;
+    public bool AutoStop { get; set; } = true;
+    public Dictionary<string, object> CustomParameters { get; set; } = new();
+}
+
+/// <summary>
+/// Preset library filter
+/// </summary>
+public class PresetLibraryFilter
+{
+    public string? Category { get; set; }
+    public PresetType? Type { get; set; }
+    public string? SearchTerm { get; set; }
+    public string? CreatedBy { get; set; }
+    public PresetDifficulty? Difficulty { get; set; }
+    public List<string>? Tags { get; set; }
+    public DateTime? CreatedAfter { get; set; }
+    public DateTime? CreatedBefore { get; set; }
+
+    public PresetFilter ToPresetFilter()
+    {
+        return new PresetFilter
+        {
+            Category = Category,
+            Type = Type,
+            SearchTerm = SearchTerm,
+            CreatedBy = CreatedBy,
+            Difficulty = Difficulty,
+            CreatedAfter = CreatedAfter,
+            CreatedBefore = CreatedBefore
+        };
+    }
+}
+
+/// <summary>
+/// Preset UI state
+/// </summary>
+public class PresetUiState
+{
+    public string StateId { get; set; } = string.Empty;
+    public PresetUiStateType Type { get; set; }
+    public bool IsActive { get; set; }
+    public DateTime LastUpdated { get; set; }
+    public Dictionary<string, object> CustomData { get; set; } = new();
+}
+
+/// <summary>
+/// Preset editor state
+/// </summary>
+public class PresetEditorState
+{
+    public string EditorId { get; set; } = string.Empty;
+    public string PresetId { get; set; } = string.Empty;
+    public PresetEditorMode Mode { get; set; }
+    public bool IsActive { get; set; }
+    public DateTime CreatedTime { get; set; }
+    public DateTime LastModified { get; set; }
+    public bool HasUnsavedChanges { get; set; }
+    public List<string> ValidationErrors { get; set; } = new();
+    public bool PreviewEnabled { get; set; }
+    public bool AutoSaveEnabled { get; set; }
+    public LightingPreset Preset { get; set; } = new();
+    public LightingPreset? OriginalPreset { get; set; }
+    public string? PreviewExecutionId { get; set; }
+    public float PreviewProgress { get; set; }
+    public int PreviewPhase { get; set; }
+}
+
+/// <summary>
+/// Preset preview state
+/// </summary>
+public class PresetPreviewState
+{
+    public string PreviewId { get; set; } = string.Empty;
+    public string PresetId { get; set; } = string.Empty;
+    public PreviewSettings Settings { get; set; } = new();
+    public bool IsActive { get; set; }
+    public DateTime StartTime { get; set; }
+    public DateTime? EndTime { get; set; }
+    public string ExecutionId { get; set; } = string.Empty;
+    public float Progress { get; set; }
+    public int CurrentPhase { get; set; }
+    public TimeSpan ElapsedTime { get; set; }
+}
+
+/// <summary>
+/// Preset library state
+/// </summary>
+public class PresetLibraryState
+{
+    public string LibraryId { get; set; } = string.Empty;
+    public PresetLibraryFilter Filter { get; set; } = new();
+    public bool IsActive { get; set; }
+    public DateTime LastUpdated { get; set; }
+    public PresetLibraryData Data { get; set; } = new();
+}
+
+/// <summary>
+/// Preset library data
+/// </summary>
+public class PresetLibraryData
+{
+    public List<PresetLibraryItem> Presets { get; set; } = new();
+    public Dictionary<PresetCategory, int> Categories { get; set; } = new();
+    public Dictionary<PresetType, int> Types { get; set; } = new();
+    public Dictionary<string, int> Tags { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int FilteredCount { get; set; }
+}
+
+/// <summary>
+/// Preset library item
+/// </summary>
+public class PresetLibraryItem
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public PresetCategory Category { get; set; }
+    public PresetType Type { get; set; }
+    public List<string> Tags { get; set; } = new();
+    public PresetDifficulty? Difficulty { get; set; }
+    public string CreatedBy { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime LastModified { get; set; }
+    public int EffectCount { get; set; }
+    public int DeviceGroupCount { get; set; }
+    public bool IsExecutable { get; set; }
+    public bool PreviewAvailable { get; set; }
+}
+
+/// <summary>
+/// Preset validation result
+/// </summary>
+public class PresetValidationResult
+{
+    public bool IsValid { get; set; }
+    public List<string> Errors { get; set; } = new();
+}
+
+/// <summary>
+/// Preset UI event arguments
 /// </summary>
 public class PresetUiEventArgs : EventArgs
 {
-    public LightingPreset? Preset { get; }
-    public DateTime EventTime { get; }
+    public string StateId { get; }
+    public PresetUiAction Action { get; }
+    public DateTime Timestamp { get; }
 
-    public PresetUiEventArgs(LightingPreset? preset)
+    public PresetUiEventArgs(string stateId, PresetUiAction action)
     {
-        Preset = preset;
-        EventTime = DateTime.UtcNow;
+        StateId = stateId;
+        Action = action;
+        Timestamp = DateTime.UtcNow;
     }
+}
+
+/// <summary>
+/// Preset editor event arguments
+/// </summary>
+public class PresetEditorEventArgs : EventArgs
+{
+    public string EditorId { get; }
+    public PresetEditorAction Action { get; }
+    public DateTime Timestamp { get; }
+
+    public PresetEditorEventArgs(string editorId, PresetEditorAction action)
+    {
+        EditorId = editorId;
+        Action = action;
+        Timestamp = DateTime.UtcNow;
+    }
+}
+
+/// <summary>
+/// Preset preview event arguments
+/// </summary>
+public class PresetPreviewEventArgs : EventArgs
+{
+    public string PreviewId { get; }
+    public PresetPreviewAction Action { get; }
+    public DateTime Timestamp { get; }
+
+    public PresetPreviewEventArgs(string previewId, PresetPreviewAction action)
+    {
+        PreviewId = previewId;
+        Action = action;
+        Timestamp = DateTime.UtcNow;
+    }
+}
+
+/// <summary>
+/// Preset library event arguments
+/// </summary>
+public class PresetLibraryEventArgs : EventArgs
+{
+    public string LibraryId { get; }
+    public PresetLibraryAction Action { get; }
+    public DateTime Timestamp { get; }
+
+    public PresetLibraryEventArgs(string libraryId, PresetLibraryAction action)
+    {
+        LibraryId = libraryId;
+        Action = action;
+        Timestamp = DateTime.UtcNow;
+    }
+}
+
+/// <summary>
+/// Preset editor modes
+/// </summary>
+public enum PresetEditorMode
+{
+    Create,
+    Edit,
+    Clone,
+    Template
+}
+
+/// <summary>
+/// Preset UI state types
+/// </summary>
+public enum PresetUiStateType
+{
+    Editor,
+    Preview,
+    Library,
+    Collection
+}
+
+/// <summary>
+/// Preset UI actions
+/// </summary>
+public enum PresetUiAction
+{
+    Created,
+    Updated,
+    Deleted,
+    Opened,
+    Closed
+}
+
+/// <summary>
+/// Preset editor actions
+/// </summary>
+public enum PresetEditorAction
+{
+    Opened,
+    Closed,
+    Updated,
+    Saved,
+    ValidationFailed,
+    PreviewStarted,
+    PreviewStopped
+}
+
+/// <summary>
+/// Preset preview actions
+/// </summary>
+public enum PresetPreviewAction
+{
+    Started,
+    Stopped,
+    Completed,
+    Error
+}
+
+/// <summary>
+/// Preset library actions
+/// </summary>
+public enum PresetLibraryAction
+{
+    Filtered,
+    Sorted,
+    Refreshed,
+    Updated
 }
