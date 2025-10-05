@@ -124,6 +124,25 @@ public partial class App : Application
         services.AddSingleton<DynamicPerformanceOptimizationService>();
         services.AddSingleton<ComprehensivePerformanceTuningService>();
 
+        // UI/UX refinement services
+        services.AddSingleton<UiUxRefinementService>();
+        services.AddSingleton<ModernUiComponentLibraryService>();
+        services.AddSingleton<UserExperienceEnhancementService>();
+        services.AddSingleton<ResponsiveDesignService>();
+
+        // Comprehensive testing services
+        services.AddSingleton<ComprehensiveTestingService>();
+        services.AddSingleton<TestAutomationService>();
+        services.AddSingleton<TestReportingService>();
+
+        // Comprehensive documentation services
+        services.AddSingleton<ComprehensiveDocumentationService>();
+        services.AddSingleton<DocumentationGenerationService>();
+
+        // Deployment preparation services
+        services.AddSingleton<DeploymentPreparationService>();
+        services.AddSingleton<AutomatedDeploymentService>();
+
         // Spotify services
         services.AddSingleton<ISpotifyAuthenticationService, SpotifyAuthenticationService>();
         services.AddSingleton<ISpotifyWebApiService, SpotifyWebApiService>();
